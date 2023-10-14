@@ -49,8 +49,9 @@ operating_dates = pd.date_range(GRAND_OPENING, periods=36, freq='M')
 
 # Revenue Variables
 GO_STUDENT_COUNT = 50
-GROWTH_RATE = 0.1 # FIXME Get from Diane
-SS_STUDENT_COUNT = 300 # FIXME Get from Diane
+GROWTH_RATE = 0.1 # 10% is a guess
+SS_STUDENT_COUNT = 384 # 80% of max
+MAX_STUDENTS = 480 # 
 MONTHLY_STUDENT_PRICE = 225 # Dollars, 2x classes per week
 camp_revenue = 300 * 15 # 15 kids at $300 # FIXME
 
@@ -137,20 +138,26 @@ add_birthday_party(unique_revenue_df, GRAND_OPENING, PERIOD_END, 300) # $300 for
 # Model revenue growth through enrollment growth
 recurring_revenue_df = revenue_growth_df(GO_STUDENT_COUNT, MONTHLY_STUDENT_PRICE, GROWTH_RATE, SS_STUDENT_COUNT, GRAND_OPENING, PERIOD_END)
 
+# Extract student count curve from revenue growth df
+students_df = recurring_revenue_df[['Date','Student_Count']].copy()
+# Convert 'Date' column to a 'MM-YYYY' format
+students_df['Date'] = students_df['Date'].dt.strftime('%m-%Y')
+# Rename the 'Date' column to 'Period'
+students_df.rename(columns={'Date': 'Period'}, inplace=True)
+
 # Combine with unique revenue occurances
 all_revenue_df = combine_revenue(recurring_revenue_df, unique_revenue_df)
-
 # Fill with leading zeros before we start making money
 all_revenue_df = pad_revenues(all_expenses_df, all_revenue_df)
 
 all_revenue_df = all_revenue_df[['Date', 'Name', 'Amount']]
-#print(all_revenue_df)
 
 
 # Add more expenses now that we have some revenue information
 all_expenses_df = add_labor_costs_df(all_expenses_df, recurring_revenue_df, HOURLY_RATE)
 all_expenses_df = add_tax_and_royalty(all_expenses_df, recurring_revenue_df)
 all_expenses_df = add_depreciation_expense(all_expenses_df, USEFUL_LIFE, INST_COMP_COST, GRAND_OPENING, PERIOD_END)
+
 
 #######################################
 ##     P R O F I T  &  L O S S       ##
@@ -171,8 +178,22 @@ profit_loss_df = pd.DataFrame({
     'Profit Loss': profit_loss['Amount']
 })
 
-save_profit_loss(profit_loss_df, pl_plot)
+# Difference in lengths
+length_diff = len(profit_loss_df) - len(students_df)
 
+# If students_df is shorter
+if length_diff > 0:
+    # Create a new DataFrame to append to the start of students_df
+    filler_df = pd.DataFrame({
+        'Period': profit_loss_df['Period'].head(length_diff).values,
+        'Student_Count': [0] * length_diff
+    })
+    # Append students_df to the end of filler_df
+    students_df = pd.concat([filler_df, students_df], axis=0).reset_index(drop=True)
+
+
+save_profit_loss(profit_loss_df, pl_plot)
+save_profit_loss_with_students(profit_loss_df, students_df, "profit_loss_students.png")
 
 #######################################
 ##         C A S H   F L O W         ##
@@ -191,4 +212,5 @@ cashflow_df = profit_loss_df.reset_index()[['Period', 'Cash On Hand']]
 
 #plot_cashflow(cashflow_df)
 save_cashflow(cashflow_df, cf_plot)
+save_cashflow_with_students(cashflow_df, students_df, "cashflow_students.png")
 
